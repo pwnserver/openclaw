@@ -791,6 +791,17 @@ export class VoiceCallWebhookServer {
     try {
       const { generateVoiceResponse } = await import("./response-generator.js");
 
+      // Persist the original task (call.metadata.initialMessage is wiped
+      // after the first greeting is spoken; task below keeps it available
+      // for every subsequent turn).
+      const task =
+        (call.metadata?.task as string | undefined) ??
+        (call.metadata?.initialMessage as string | undefined) ??
+        undefined;
+      if (task && !call.metadata?.task) {
+        call.metadata = { ...(call.metadata ?? {}), task };
+      }
+
       const result = await generateVoiceResponse({
         voiceConfig: this.config,
         coreConfig: this.coreConfig,
@@ -799,6 +810,8 @@ export class VoiceCallWebhookServer {
         from: call.from,
         transcript: call.transcript,
         userMessage,
+        ...(call.sessionKey ? { initiatorSessionKey: call.sessionKey } : {}),
+        ...(task ? { task } : {}),
       });
 
       if (result.error) {

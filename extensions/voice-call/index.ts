@@ -411,7 +411,13 @@ export default definePluginEntry({
       },
     );
 
-    api.registerTool({
+    // Register as a factory so the tool gets a fresh ToolContext on each
+    // Pi agent turn.  We use ctx.sessionKey to wire the initiator's session
+    // through manager.initiateCall -> CallRecord.sessionKey, which
+    // response-generator later reads to run the voice agent in the same
+    // Pi session as the initiator (gives the voice agent the task + memory
+    // of the chat that triggered the call).
+    api.registerTool((toolCtx) => ({
       name: "voice_call",
       label: "Voice Call",
       description: "Make phone calls and have voice conversations via the voice-call plugin.",
@@ -421,6 +427,8 @@ export default definePluginEntry({
           content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }],
           details: payload,
         });
+
+        const initiatorSessionKey = toolCtx.sessionKey;
 
         try {
           const rt = await ensureRuntime();
@@ -436,7 +444,7 @@ export default definePluginEntry({
                 if (!to) {
                   throw new Error("to required");
                 }
-                const result = await rt.manager.initiateCall(to, undefined, {
+                const result = await rt.manager.initiateCall(to, initiatorSessionKey, {
                   message,
                   mode:
                     params.mode === "notify" || params.mode === "conversation"
@@ -509,7 +517,7 @@ export default definePluginEntry({
           if (!to) {
             throw new Error("to required for call");
           }
-          const result = await rt.manager.initiateCall(to, undefined, {
+          const result = await rt.manager.initiateCall(to, initiatorSessionKey, {
             message: normalizeOptionalString(params.message),
           });
           if (!result.success) {
@@ -522,7 +530,7 @@ export default definePluginEntry({
           });
         }
       },
-    });
+    }));
 
     api.registerCli(
       ({ program }) =>

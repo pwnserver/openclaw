@@ -25,6 +25,21 @@ export type VoiceResponseParams = {
   transcript: Array<{ speaker: "user" | "bot"; text: string }>;
   /** Latest user message */
   userMessage: string;
+  /**
+   * Session key of the chat that initiated the call (if any).  When set,
+   * the voice agent will run in that same Pi session — so it inherits the
+   * initiator's history, task context, memory, and tools.  Without this
+   * the voice agent runs in an isolated `voice:<phone>` session and has
+   * no idea why the call was placed.
+   */
+  initiatorSessionKey?: string;
+  /**
+   * The original task message passed to voice_call.initiate_call (if any).
+   * Injected into the voice agent's system prompt so the task persists
+   * across turns (otherwise the manager would delete it after the
+   * initial greeting is spoken).
+   */
+  task?: string;
 };
 
 export type VoiceResponseResult = {
@@ -178,16 +193,32 @@ function extractSpokenTextFromPayloads(payloads: VoiceResponsePayload[]): string
 export async function generateVoiceResponse(
   params: VoiceResponseParams,
 ): Promise<VoiceResponseResult> {
-  const { voiceConfig, callId, from, transcript, userMessage, coreConfig, agentRuntime } = params;
+  const {
+    voiceConfig,
+    callId,
+    from,
+    transcript,
+    userMessage,
+    coreConfig,
+    agentRuntime,
+    initiatorSessionKey,
+    task,
+  } = params;
 
   if (!coreConfig) {
     return { text: null, error: "Core config unavailable for voice response" };
   }
   const cfg = coreConfig;
 
-  // Build voice-specific session key based on phone number
+  // If the call was initiated from another chat session, reuse that
+  // session key so the voice agent inherits its history, task context,
+  // and tools.  Otherwise fall back to a phone-scoped voice session —
+  // still isolates by caller but carries nothing from an initiator.
   const normalizedPhone = from.replace(/\D/g, "");
-  const sessionKey = `voice:${normalizedPhone}`;
+  const fallbackVoiceKey = normalizedPhone ? `voice:${normalizedPhone}` : `voice:${callId}`;
+  const sessionKey = initiatorSessionKey && initiatorSessionKey.length > 0
+    ? initiatorSessionKey
+    : fallbackVoiceKey;
   const agentId = "main";
 
   // Resolve paths
@@ -233,11 +264,18 @@ export async function generateVoiceResponse(
     `You are ${agentName}, a helpful voice assistant on a phone call. Keep responses brief and conversational (1-2 sentences max). Be natural and friendly. The caller's phone number is ${from}. You have access to tools - use them when helpful.`;
 
   let extraSystemPrompt = basePrompt;
+  if (task && task.length > 0) {
+    // Task is what the initiator asked for (via initiate_call's `message`
+    // arg).  Manager deletes it from call.metadata after the greeting is
+    // spoken, but we persist it on the response-generator side so every
+    // subsequent turn still knows what the call is for.
+    extraSystemPrompt = `${extraSystemPrompt}\n\nYour task on this call: ${task}\n\nStay focused on this task. Ask clarifying questions only as needed. Do not drift.`;
+  }
   if (transcript.length > 0) {
     const history = transcript
       .map((entry) => `${entry.speaker === "bot" ? "You" : "Caller"}: ${entry.text}`)
       .join("\n");
-    extraSystemPrompt = `${basePrompt}\n\nConversation so far:\n${history}`;
+    extraSystemPrompt = `${extraSystemPrompt}\n\nConversation so far:\n${history}`;
   }
   extraSystemPrompt = `${extraSystemPrompt}\n\n${VOICE_SPOKEN_OUTPUT_CONTRACT}`;
 

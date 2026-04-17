@@ -275,8 +275,13 @@ export async function speakInitialMessage(
       return;
     }
 
-    // Clear only after successful playback so transient provider failures can retry.
+    // Promote the original message to `task` so every subsequent turn can
+    // still see why the call was placed, then clear the raw initialMessage
+    // so it isn't re-spoken on retries.
     if (call.metadata) {
+      if (call.metadata.initialMessage && !call.metadata.task) {
+        call.metadata.task = call.metadata.initialMessage;
+      }
       delete call.metadata.initialMessage;
       persistCallRecord(ctx.storePath, call);
     }
