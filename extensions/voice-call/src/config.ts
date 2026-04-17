@@ -64,6 +64,16 @@ export const PlivoConfigSchema = z
   .strict();
 export type PlivoConfig = z.infer<typeof PlivoConfigSchema>;
 
+export const AsteriskConfigSchema = z
+  .object({
+    /** LRTTC Go mediaserver HTTP API URL (e.g. "http://host.docker.internal:9081") */
+    url: z.string().min(1).optional(),
+    /** Shared secret for HMAC webhook verification and API bearer auth */
+    secret: z.string().min(1).optional(),
+  })
+  .strict();
+export type AsteriskConfig = z.infer<typeof AsteriskConfigSchema>;
+
 export { TtsAutoSchema, TtsConfigSchema, TtsModeSchema, TtsProviderSchema };
 export type VoiceCallTtsConfig = z.infer<typeof TtsConfigSchema>;
 
@@ -278,8 +288,8 @@ export const VoiceCallConfigSchema = z
     /** Enable voice call functionality */
     enabled: z.boolean().default(false),
 
-    /** Active provider (telnyx, twilio, plivo, or mock) */
-    provider: z.enum(["telnyx", "twilio", "plivo", "mock"]).optional(),
+    /** Active provider (telnyx, twilio, plivo, asterisk, or mock) */
+    provider: z.enum(["telnyx", "twilio", "plivo", "asterisk", "mock"]).optional(),
 
     /** Telnyx-specific configuration */
     telnyx: TelnyxConfigSchema.optional(),
@@ -289,6 +299,9 @@ export const VoiceCallConfigSchema = z
 
     /** Plivo-specific configuration */
     plivo: PlivoConfigSchema.optional(),
+
+    /** Asterisk (LRTTC mediaserver) configuration */
+    asterisk: AsteriskConfigSchema.optional(),
 
     /** Phone number to call from (E.164) */
     fromNumber: E164Schema.optional(),
@@ -514,6 +527,13 @@ export function resolveVoiceCallConfig(config: VoiceCallConfigInput): VoiceCallC
     resolved.plivo.authToken = resolved.plivo.authToken ?? process.env.PLIVO_AUTH_TOKEN;
   }
 
+  // Asterisk (LRTTC mediaserver)
+  if (resolved.provider === "asterisk") {
+    resolved.asterisk = resolved.asterisk ?? {};
+    resolved.asterisk.url = resolved.asterisk.url ?? process.env.ASTERISK_API_URL;
+    resolved.asterisk.secret = resolved.asterisk.secret ?? process.env.ASTERISK_WEBHOOK_SECRET;
+  }
+
   // Tunnel Config
   resolved.tunnel = resolved.tunnel ?? {
     provider: "none",
@@ -555,7 +575,7 @@ export function validateProviderConfig(config: VoiceCallConfig): {
     errors.push("plugins.entries.voice-call.config.provider is required");
   }
 
-  if (!config.fromNumber && config.provider !== "mock") {
+  if (!config.fromNumber && config.provider !== "mock" && config.provider !== "asterisk") {
     errors.push("plugins.entries.voice-call.config.fromNumber is required");
   }
 
@@ -599,6 +619,19 @@ export function validateProviderConfig(config: VoiceCallConfig): {
     if (!config.plivo?.authToken) {
       errors.push(
         "plugins.entries.voice-call.config.plivo.authToken is required (or set PLIVO_AUTH_TOKEN env)",
+      );
+    }
+  }
+
+  if (config.provider === "asterisk") {
+    if (!config.asterisk?.url) {
+      errors.push(
+        "plugins.entries.voice-call.config.asterisk.url is required (LRTTC mediaserver API URL)",
+      );
+    }
+    if (!config.asterisk?.secret) {
+      errors.push(
+        "plugins.entries.voice-call.config.asterisk.secret is required (shared HMAC/bearer secret)",
       );
     }
   }

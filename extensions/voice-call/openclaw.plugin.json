@@ -9,6 +9,8 @@
       "TWILIO_AUTH_TOKEN",
       "PLIVO_AUTH_ID",
       "PLIVO_AUTH_TOKEN",
+      "ASTERISK_API_URL",
+      "ASTERISK_WEBHOOK_SECRET",
       "NGROK_AUTHTOKEN",
       "NGROK_DOMAIN"
     ]
@@ -16,7 +18,7 @@
   "uiHints": {
     "provider": {
       "label": "Provider",
-      "help": "Use twilio, telnyx, or mock for dev/no-network."
+      "help": "Use twilio, telnyx, asterisk (LRTTC), or mock for dev/no-network."
     },
     "fromNumber": {
       "label": "From Number",
@@ -177,7 +179,7 @@
       },
       "provider": {
         "type": "string",
-        "enum": ["telnyx", "twilio", "plivo", "mock"]
+        "enum": ["telnyx", "twilio", "plivo", "asterisk", "mock"]
       },
       "telnyx": {
         "type": "object",
@@ -215,6 +217,20 @@
           },
           "authToken": {
             "type": "string"
+          }
+        }
+      },
+      "asterisk": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "LRTTC Go mediaserver HTTP API URL"
+          },
+          "secret": {
+            "type": "string",
+            "description": "Shared HMAC/bearer secret"
           }
         }
       },

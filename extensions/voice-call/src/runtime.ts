@@ -140,6 +140,18 @@ async function resolveProvider(config: VoiceCallConfig): Promise<VoiceCallProvid
         },
       );
     }
+    case "asterisk": {
+      const { AsteriskProvider } = await import("./providers/asterisk.js");
+      return new AsteriskProvider(
+        {
+          url: config.asterisk?.url ?? "",
+          secret: config.asterisk?.secret ?? "",
+        },
+        {
+          skipVerification: config.skipSignatureVerification,
+        },
+      );
+    }
     case "mock": {
       const { MockProvider } = await import("./providers/mock.js");
       return new MockProvider();

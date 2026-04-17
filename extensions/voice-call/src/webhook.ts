@@ -628,6 +628,33 @@ export class VoiceCallWebhookServer {
         console.warn("[voice-call] Replay detected; skipping event side effects");
       } else {
         this.processParsedEvents(parsed.events);
+
+        // For HTTP-webhook providers (e.g. Asterisk), trigger agent auto-response
+        // when a final speech transcript arrives. The media-stream path (Twilio)
+        // handles this in the onTranscript callback; HTTP webhooks need it here.
+        for (const event of parsed.events) {
+          if (event.type !== "call.speech" || !event.isFinal) {
+            continue;
+          }
+          // Look up by internal callId first, then fall back to providerCallId.
+          // processEvent() mutates event.callId to the internal UUID when it
+          // finds the call, but if the lookup inside processEvent failed
+          // (e.g. providerCallIdMap not populated), event.callId still holds
+          // the raw provider value, so we need the fallback.
+          const call =
+            this.manager.getCall(event.callId) ??
+            this.manager.getCallByProviderCallId(event.providerCallId ?? event.callId);
+          if (!call) {
+            continue;
+          }
+          const callMode = call.metadata?.mode as string | undefined;
+          const shouldRespond = call.direction === "inbound" || callMode === "conversation";
+          if (shouldRespond) {
+            this.handleInboundResponse(call.callId, event.transcript).catch((err) => {
+              console.warn(`[voice-call] Failed to auto-respond:`, err);
+            });
+          }
+        }
       }
 
       return normalizeWebhookResponse(parsed);
