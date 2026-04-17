@@ -63,6 +63,17 @@ const PlivoConfigSchema = z
   .strict();
 export type PlivoConfig = z.infer<typeof PlivoConfigSchema>;
 
+/** LRTTC Go mediaserver (Asterisk in front). */
+export const AsteriskConfigSchema = z
+  .object({
+    /** LRTTC Go mediaserver HTTP API URL (e.g. "http://host.docker.internal:9081") */
+    url: z.string().min(1).optional(),
+    /** Shared secret for HMAC webhook verification and API bearer auth */
+    secret: z.string().min(1).optional(),
+  })
+  .strict();
+export type AsteriskConfig = z.infer<typeof AsteriskConfigSchema>;
+
 export type VoiceCallTtsConfig = z.infer<typeof TtsConfigSchema>;
 
 const VoiceCallNumberRouteConfigSchema = z
@@ -268,13 +279,16 @@ const VoiceCallConfigSchema = z
   .object({
     enabled: z.boolean().default(false),
 
-    provider: z.enum(["telnyx", "twilio", "plivo", "mock"]).optional(),
+    provider: z.enum(["telnyx", "twilio", "plivo", "asterisk", "mock"]).optional(),
 
     telnyx: TelnyxConfigSchema.optional(),
 
     twilio: TwilioConfigSchema.optional(),
 
     plivo: PlivoConfigSchema.optional(),
+
+    /** Asterisk (LRTTC mediaserver) configuration */
+    asterisk: AsteriskConfigSchema.optional(),
 
     fromNumber: E164Schema.optional(),
 
@@ -611,6 +625,15 @@ export function resolveVoiceCallConfig(config: VoiceCallConfig): VoiceCallConfig
       resolved.plivo.authToken ?? resolveSpeechProviderApiKey(process.env.PLIVO_AUTH_TOKEN);
   }
 
+  // Asterisk (LRTTC mediaserver)
+  if (resolved.provider === "asterisk") {
+    resolved.asterisk = { ...resolved.asterisk };
+    resolved.asterisk.url =
+      resolved.asterisk.url ?? resolveSpeechProviderApiKey(process.env.ASTERISK_API_URL);
+    resolved.asterisk.secret =
+      resolved.asterisk.secret ?? resolveSpeechProviderApiKey(process.env.ASTERISK_WEBHOOK_SECRET);
+  }
+
   resolved.tunnel.ngrokAuthToken =
     resolved.tunnel.ngrokAuthToken ?? resolveSpeechProviderApiKey(process.env.NGROK_AUTHTOKEN);
   resolved.tunnel.ngrokDomain =
@@ -630,7 +653,7 @@ export function validateProviderConfig(config: VoiceCallConfig) {
     errors.push("plugins.entries.voice-call.config.provider is required");
   }
 
-  if (!config.fromNumber && config.provider !== "mock") {
+  if (!config.fromNumber && config.provider !== "mock" && config.provider !== "asterisk") {
     errors.push(
       config.provider === "twilio"
         ? "plugins.entries.voice-call.config.fromNumber is required (or set TWILIO_FROM_NUMBER env)"
@@ -667,6 +690,19 @@ export function validateProviderConfig(config: VoiceCallConfig) {
   if (config.provider === "plivo") {
     requireCredential("authId", config.plivo?.authId, "PLIVO_AUTH_ID");
     requireCredential("authToken", config.plivo?.authToken, "PLIVO_AUTH_TOKEN");
+  }
+
+  if (config.provider === "asterisk") {
+    if (!config.asterisk?.url) {
+      errors.push(
+        "plugins.entries.voice-call.config.asterisk.url is required (LRTTC mediaserver API URL)",
+      );
+    }
+    if (!config.asterisk?.secret) {
+      errors.push(
+        "plugins.entries.voice-call.config.asterisk.secret is required (shared HMAC/bearer secret)",
+      );
+    }
   }
 
   if (config.realtime.enabled && config.inboundPolicy === "disabled") {

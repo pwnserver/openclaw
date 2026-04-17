@@ -26,7 +26,7 @@
   "uiHints": {
     "provider": {
       "label": "Provider",
-      "help": "Use twilio, telnyx, or mock for dev/no-network."
+      "help": "Use twilio, telnyx, plivo, asterisk (LRTTC mediaserver), or mock for dev/no-network."
     },
     "fromNumber": {
       "label": "From Number",
@@ -283,7 +283,7 @@
       "id": "phone-provider",
       "title": "Phone provider",
       "order": 10,
-      "properties": ["enabled", "provider", "telnyx", "twilio", "plivo", "fromNumber"]
+      "properties": ["enabled", "provider", "telnyx", "twilio", "plivo", "asterisk", "fromNumber"]
     },
     {
       "id": "inbound-calls",
@@ -356,7 +356,7 @@
       },
       "provider": {
         "type": "string",
-        "enum": ["telnyx", "twilio", "plivo", "mock"]
+        "enum": ["telnyx", "twilio", "plivo", "asterisk", "mock"]
       },
       "telnyx": {
         "type": "object",
@@ -402,6 +402,20 @@
           },
           "authToken": {
             "type": "string"
+          }
+        }
+      },
+      "asterisk": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "LRTTC Go mediaserver HTTP API URL (env ASTERISK_API_URL)"
+          },
+          "secret": {
+            "type": "string",
+            "description": "Shared HMAC/bearer secret (env ASTERISK_WEBHOOK_SECRET)"
           }
         }
       },
