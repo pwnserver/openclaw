@@ -157,8 +157,34 @@ export default definePluginEntry({
       }
     }
 
-    let runtimePromise: Promise<VoiceCallRuntime> | null = null;
-    let runtime: VoiceCallRuntime | null = null;
+    // LRTTC patch: singleton runtime across all plugin-factory invocations.
+    //
+    // Why this exists: the gateway may invoke the plugin factory multiple
+    // times in the same Node process — once at gateway startup (to mount
+    // webhook routes) and again from the tool-execution context when an
+    // agent calls the `voice_call` tool.  With closure-local `runtime` /
+    // `runtimePromise` each invocation creates a fresh VoiceCallRuntime,
+    // which starts its own webhook HTTP server and fails with EADDRINUSE
+    // on the configured `serve.port` (3334 by default).
+    //
+    // Pinning the cache to `globalThis` makes the runtime survive across
+    // factory invocations within the same process.  `globalThis` is the
+    // canonical cross-boundary scope (works for both ESM and jiti/CJS
+    // paths that OpenClaw uses for plugins), so the second load returns
+    // the already-started runtime instead of constructing a duplicate.
+    //
+    // TODO: remove once OpenClaw upstream exposes a shared runtime
+    // handle from the plugin API (see openclaw/openclaw#EADDRINUSE).
+    const RUNTIME_CACHE_KEY = "__openclaw_voiceCallRuntime__";
+    type RuntimeCache = {
+      promise: Promise<VoiceCallRuntime> | null;
+      runtime: VoiceCallRuntime | null;
+    };
+    const globalCache = globalThis as unknown as Record<string, RuntimeCache>;
+    if (!globalCache[RUNTIME_CACHE_KEY]) {
+      globalCache[RUNTIME_CACHE_KEY] = { promise: null, runtime: null };
+    }
+    const cache = globalCache[RUNTIME_CACHE_KEY];
 
     const ensureRuntime = async () => {
       if (!config.enabled) {
@@ -167,11 +193,11 @@ export default definePluginEntry({
       if (!validation.valid) {
         throw new Error(validation.errors.join("; "));
       }
-      if (runtime) {
-        return runtime;
+      if (cache.runtime) {
+        return cache.runtime;
       }
-      if (!runtimePromise) {
-        runtimePromise = createVoiceCallRuntime({
+      if (!cache.promise) {
+        cache.promise = createVoiceCallRuntime({
           config,
           coreConfig: api.config as CoreConfig,
           fullConfig: api.config,
@@ -181,15 +207,15 @@ export default definePluginEntry({
         });
       }
       try {
-        runtime = await runtimePromise;
+        cache.runtime = await cache.promise;
       } catch (err) {
         // Reset so the next call can retry instead of caching the
         // rejected promise forever (which also leaves the port orphaned
         // if the server started before the failure).  See: #32387
-        runtimePromise = null;
+        cache.promise = null;
         throw err;
       }
-      return runtime;
+      return cache.runtime;
     };
 
     const sendError = (respond: (ok: boolean, payload?: unknown) => void, err: unknown) => {
@@ -522,15 +548,15 @@ export default definePluginEntry({
         }
       },
       stop: async () => {
-        if (!runtimePromise) {
+        if (!cache.promise) {
           return;
         }
         try {
-          const rt = await runtimePromise;
+          const rt = await cache.promise;
           await rt.stop();
         } finally {
-          runtimePromise = null;
-          runtime = null;
+          cache.promise = null;
+          cache.runtime = null;
         }
       },
     });
