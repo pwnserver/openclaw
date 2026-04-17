@@ -129,8 +129,18 @@ export async function initiateCall(
   }
 
   const callId = crypto.randomUUID();
+  // Asterisk routes outbound through its dialplan / trunk, not by a
+  // PSTN from-number.  Fall back to a fixed label so the call record
+  // still has a non-empty `from` without forcing the operator to
+  // configure an E.164 number they don't have.  Mock keeps its
+  // placeholder for local dev.
+  const providerDefaultFrom: Record<string, string> = {
+    mock: "+15550000000",
+    asterisk: "lrttc-ai",
+  };
   const from =
-    ctx.config.fromNumber || (ctx.provider?.name === "mock" ? "+15550000000" : undefined);
+    ctx.config.fromNumber ||
+    (ctx.provider?.name ? providerDefaultFrom[ctx.provider.name] : undefined);
   if (!from) {
     return { callId: "", success: false, error: "fromNumber not configured" };
   }
