@@ -15,10 +15,23 @@ import type {
   WebhookContext,
   WebhookVerificationResult,
 } from "../types.js";
+import { TerminalStates } from "../types.js";
 import { createWebhookReplayCache, reserveWebhookReplay } from "../webhook-replay.js";
 import type { VoiceCallProvider } from "./base.js";
 
 const asteriskReplayCache = createWebhookReplayCache();
+
+/**
+ * The mediaserver reports `reason: "hangup"` whenever the Asterisk channel
+ * goes away, without knowing which side hung up. Call records only accept
+ * EndReason values, and an unknown one fails the save, leaving the call
+ * active and holding a maxConcurrentCalls slot.
+ */
+function toEndReason(reason: unknown): EndReason {
+  return typeof reason === "string" && TerminalStates.has(reason as EndReason)
+    ? (reason as EndReason)
+    : "completed";
+}
 
 /**
  * Configuration for the Asterisk provider.
@@ -194,7 +207,7 @@ export class AsteriskProvider implements VoiceCallProvider {
         return {
           ...base,
           type: "call.ended" as const,
-          reason: (data?.reason as EndReason) ?? "completed",
+          reason: toEndReason(data?.reason),
         };
 
       case "call.error":

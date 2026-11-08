@@ -103,6 +103,22 @@ describe("AsteriskProvider", () => {
     // Same millisecond, different event type: ids must not collide.
     expect(speech.events[0]?.id).not.toBe(initiated.events[0]?.id);
 
+    const endReason = (reason: unknown) =>
+      provider.parseWebhookEvent(
+        signedContext({
+          event: "call.ended",
+          callId: "ws-4",
+          timestamp: uniqueTimestamp(),
+          data: { reason },
+        }),
+      ).events[0];
+    // The mediaserver sends "hangup"; call records reject unknown reasons.
+    expect(endReason("hangup")).toEqual(
+      expect.objectContaining({ type: "call.ended", reason: "completed" }),
+    );
+    expect(endReason(undefined)).toEqual(expect.objectContaining({ reason: "completed" }));
+    expect(endReason("hangup-user")).toEqual(expect.objectContaining({ reason: "hangup-user" }));
+
     expect(
       provider.parseWebhookEvent(signedContext({ event: "call.unknown", callId: "ws-3" })).events,
     ).toEqual([]);
