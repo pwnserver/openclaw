@@ -161,6 +161,28 @@ describe("AsteriskProvider", () => {
     });
   });
 
+  it("treats hangup of a session the mediaserver no longer has as done", async () => {
+    const provider = createProvider();
+    const gone = () =>
+      new Response(JSON.stringify({ error: "session not found" }), { status: 404 });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(async () => gone()),
+    );
+
+    await expect(
+      provider.hangupCall({ callId: "c-2", providerCallId: "ws-6", reason: "hangup-bot" }),
+    ).resolves.toBeUndefined();
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(async () => new Response("boom", { status: 500 })),
+    );
+    await expect(
+      provider.hangupCall({ callId: "c-2", providerCallId: "ws-6", reason: "hangup-bot" }),
+    ).rejects.toThrow("500");
+  });
+
   it("sends speak requests to the mediaserver API", async () => {
     const provider = createProvider();
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ status: "ok" })));

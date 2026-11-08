@@ -21,6 +21,16 @@ import type { VoiceCallProvider } from "./base.js";
 
 const asteriskReplayCache = createWebhookReplayCache();
 
+class AsteriskApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "AsteriskApiError";
+  }
+}
+
 /**
  * The mediaserver reports `reason: "hangup"` whenever the Asterisk channel
  * goes away, without knowing which side hung up. Call records only accept
@@ -241,9 +251,17 @@ export class AsteriskProvider implements VoiceCallProvider {
   }
 
   async hangupCall(input: HangupCallInput): Promise<void> {
-    await this.apiCall("/api/call/hangup", {
-      session_id: input.providerCallId,
-    });
+    try {
+      await this.apiCall("/api/call/hangup", {
+        session_id: input.providerCallId,
+      });
+    } catch (err) {
+      // 404: the mediaserver session is already gone, so the call is over.
+      if (err instanceof AsteriskApiError && err.status === 404) {
+        return;
+      }
+      throw err;
+    }
   }
 
   async playTts(input: PlayTtsInput): Promise<void> {
@@ -309,7 +327,10 @@ export class AsteriskProvider implements VoiceCallProvider {
     const resp = await fetch(url, init);
     if (!resp.ok) {
       const text = await resp.text().catch(() => "");
-      throw new Error(`Asterisk API ${method} ${path}: ${resp.status} ${text}`);
+      throw new AsteriskApiError(
+        `Asterisk API ${method} ${path}: ${resp.status} ${text}`,
+        resp.status,
+      );
     }
 
     return resp.json() as Promise<T>;
