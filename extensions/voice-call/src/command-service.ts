@@ -1,6 +1,7 @@
 // Voice Call command service owns operations shared by gateway and model-tool adapters.
 import { timestampMsToIsoString } from "openclaw/plugin-sdk/number-runtime";
 import { CallBriefSchema } from "./call-brief.js";
+import { resolveCallOwnerSession } from "./call-owner-session.js";
 import type { VoiceCallRuntime } from "./runtime.js";
 import { TerminalStates, type CallRecord, type OutboundCallOptions } from "./types.js";
 
@@ -127,17 +128,14 @@ export function createVoiceCallCommandService(ensureRuntime: () => Promise<Voice
       if (!call || TerminalStates.has(call.state)) {
         throw new VoiceCallCommandInputError("Call is not active");
       }
-      const requester = call.metadata?.requesterSessionKey;
+      const owner = resolveCallOwnerSession(call, rt.config);
       if (
         !params.operator &&
-        (!params.requesterSessionKey || requester !== params.requesterSessionKey)
+        (!params.requesterSessionKey || owner !== params.requesterSessionKey)
       ) {
         throw new VoiceCallCommandInputError(
-          "Only the requester session or an operator may steer this call",
+          "Only the requester session, the inbound report session, or an operator may steer this call",
         );
-      }
-      if (!rt.config.realtime.enabled) {
-        throw new VoiceCallCommandInputError("Steering requires an active realtime call");
       }
       await rt.manager.updateCallMetadata(
         call,
@@ -153,6 +151,14 @@ export function createVoiceCallCommandService(ensureRuntime: () => Promise<Voice
       params.assertCurrent?.();
       if (rt.manager.getCall(callId) !== call || TerminalStates.has(call.state)) {
         throw new VoiceCallCommandInputError("Call is not active");
+      }
+      if (!rt.config.realtime.enabled) {
+        // Classic calls (provider STT -> agent -> TTS): guidance reaches the next agent
+        // reply through ownerInstructions; say is spoken verbatim through the provider.
+        if (params.mode === "say") {
+          requireSuccess(await rt.manager.speak(callId, message), "Steering failed");
+        }
+        return { success: true };
       }
       const instruction =
         params.mode === "say"

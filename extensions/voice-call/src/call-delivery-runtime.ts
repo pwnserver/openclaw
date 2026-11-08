@@ -9,6 +9,7 @@ import {
 import type { PluginRuntime } from "openclaw/plugin-sdk/runtime-store";
 import { appendSessionTranscriptMessageByIdentityStrict } from "openclaw/plugin-sdk/session-transcript-runtime";
 import { chunkTextForOutbound } from "openclaw/plugin-sdk/text-chunking";
+import { resolveCallOwnerSession } from "./call-owner-session.js";
 import type { VoiceCallConfig } from "./config.js";
 import type { CallManager } from "./manager.js";
 import { copyCallRecord } from "./manager/state.js";
@@ -33,15 +34,6 @@ type LiveCallDelivery = {
   timer?: ReturnType<typeof setTimeout>;
   work: Promise<void>;
 };
-
-function requesterSession(call: CallRecord, config: VoiceCallConfig): string | undefined {
-  const session = call.metadata?.requesterSessionKey;
-  return typeof session === "string" && session.trim()
-    ? session.trim()
-    : call.direction === "inbound"
-      ? config.reports.inboundSessionKey
-      : undefined;
-}
 
 /** Transcript index already handed to a live batch by an earlier process, if any. */
 function persistedLiveCursor(call: CallRecord): number {
@@ -385,7 +377,7 @@ export function createCallDeliveryRuntime(params: {
       return Promise.resolve();
     }
     const snapshot = copyCallRecord(call);
-    const sessionKey = requesterSession(snapshot, params.config);
+    const sessionKey = resolveCallOwnerSession(snapshot, params.config);
     let state = live.get(call.callId);
     if (params.config.live.transcript && sessionKey) {
       if (!state) {

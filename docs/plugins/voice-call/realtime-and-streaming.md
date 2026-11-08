@@ -141,9 +141,11 @@ do not expand approvals or disclosure permissions.
 
 `steer_call` and `voicecall.steer` accept `callId`, `message`, and optional `mode`
 (`guidance` by default, or `say` for verbatim speech). Steering is restricted to
-the requester session or an authorized operator and requires the exact active
-call ID. Native delegation uses the host's spoken response path. Later consults
-receive the most recent eight owner instructions.
+the requester session, the `reports.inboundSessionKey` session for inbound calls,
+or an authorized operator, and requires the exact active call ID. Native
+delegation uses the host's spoken response path. Later consults receive the most
+recent eight owner instructions. Without realtime voice, `guidance` applies from
+the next agent reply and `say` is spoken through the provider's TTS.
 
 Optional plugin configuration:
 
