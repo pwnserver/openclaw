@@ -114,7 +114,15 @@ export async function initiateCall(
   }
 
   const callId = crypto.randomUUID();
-  const from = ctx.config.fromNumber || (ctx.provider.name === "mock" ? "+15550000000" : undefined);
+  // Asterisk routes through its dialplan: the mediaserver picks the trunk and
+  // CallerID, so the call record only needs a label.
+  const from =
+    ctx.config.fromNumber ||
+    (ctx.provider.name === "mock"
+      ? "+15550000000"
+      : ctx.provider.name === "asterisk"
+        ? "lrttc-ai"
+        : undefined);
   if (!from) {
     return { callId: "", success: false, error: "fromNumber not configured" };
   }
