@@ -192,6 +192,17 @@ describe("generateVoiceResponse", () => {
     expect(args.extraSystemPrompt).toContain("Return only valid JSON in this exact shape");
   });
 
+  it("places trusted call instructions in the system prompt, not the caller prompt", async () => {
+    const callInstructions = "## This call's brief\nTask: find out why the caller is calling";
+    const { args } = await generated({ callInstructions });
+
+    expect(args.extraSystemPrompt).toContain(callInstructions);
+    expect(args.prompt).not.toContain("find out why the caller is calling");
+
+    const { args: withoutBrief } = await generated({ callInstructions: "   " });
+    expect(withoutBrief.extraSystemPrompt).not.toContain("This call's brief");
+  });
+
   it("does not replay cumulative call history after the first caller turn", async () => {
     const currentCallerSpeech = "What did you just say?";
     const { args } = await generated({

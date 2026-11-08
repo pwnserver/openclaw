@@ -34,6 +34,8 @@ type VoiceResponseParams = {
   /** Audible call transcript, used only for bounded first-turn opening context. */
   transcript: Array<{ speaker: "user" | "bot"; text: string }>;
   userMessage: string;
+  /** Trusted per-call instructions (call brief + owner steering), appended to the system prompt. */
+  callInstructions?: string;
   /** Delivers completed reply blocks while post-turn work is still running. */
   onEarlyText?: (text: string) => Promise<boolean>;
 };
@@ -365,8 +367,10 @@ export async function generateVoiceResponse(params: VoiceResponseParams) {
         const basePrompt =
           voiceConfig.responseSystemPrompt ??
           `You are ${agentName}, a helpful voice assistant on a phone call. Keep responses brief and conversational (1-2 sentences max). Be natural and friendly. The caller's phone number is ${from}. You have access to tools - use them when helpful.`;
+        const callInstructions = params.callInstructions?.trim();
         const extraSystemPrompt = [
           basePrompt,
+          ...(callInstructions ? [callInstructions] : []),
           VOICE_OPENING_CONTEXT_POLICY,
           VOICE_SPOKEN_OUTPUT_CONTRACT,
         ].join("\n\n");

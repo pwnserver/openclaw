@@ -36,9 +36,9 @@ import type { VoiceCallProvider } from "./providers/base.js";
 import { isProviderStatusTerminal } from "./providers/shared/call-status.js";
 import type { TwilioProvider } from "./providers/twilio.js";
 import { normalizeProxyIp } from "./proxy-ip.js";
-import { resolveCallAgentId } from "./resolve-call-agent-id.js";
 import type { CallRecord, NormalizedEvent, WebhookContext } from "./types.js";
 import type { WebhookResponsePayload } from "./webhook.types.js";
+import { buildClassicVoiceResponseContext } from "./webhook/classic-response-context.js";
 import type { RealtimeCallHandler } from "./webhook/realtime-handler.js";
 import { acceptRealtimeInboundRequest } from "./webhook/realtime-inbound-admission.js";
 import { startStaleCallReaper } from "./webhook/stale-call-reaper.js";
@@ -902,11 +902,7 @@ export class VoiceCallWebhookServer {
         coreConfig: this.coreConfig,
         agentRuntime: this.agentRuntime,
         callId,
-        sessionKey: call.sessionKey,
-        from: call.from,
-        senderIsOwner: call.direction === "inbound" ? false : undefined,
-        agentId: resolveCallAgentId(call),
-        transcript: call.transcript,
+        ...buildClassicVoiceResponseContext(this.manager.getCall(callId) ?? call),
         userMessage,
         onEarlyText: speakResponse,
       });
